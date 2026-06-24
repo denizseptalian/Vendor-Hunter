@@ -268,7 +268,11 @@ CATEGORIES = [
 # ─── AI Search Function ──────────────────────────────────────────
 def search_vendors(keyword: str, location: str, category: str) -> list[dict]:
     """Call Claude with web search to find vendors."""
-    client = anthropic.Anthropic()
+    api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.secrets.get("anthropic_api_key")
+    if not api_key:
+        st.error("❌ API Key tidak ditemukan! Pastikan file `.streamlit/secrets.toml` sudah diisi dengan ANTHROPIC_API_KEY.")
+        return []
+    client = anthropic.Anthropic(api_key=api_key)
 
     location_ctx = location if location != "Semua Provinsi" else "Indonesia"
     cat_ctx = f" kategori {category}" if category != "Semua Kategori" else ""
