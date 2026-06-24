@@ -1,8 +1,8 @@
 import streamlit as st
-import anthropic
+import requests
 import json
 import re
-import time
+
 from datetime import datetime
 
 # ─── Page Config ────────────────────────────────────────────────
@@ -265,26 +265,25 @@ CATEGORIES = [
 ]
 
 
-# ─── AI Search Function ──────────────────────────────────────────
+# ─── AI Search Function (Gemini) ────────────────────────────────
 def search_vendors(keyword: str, location: str, category: str) -> list[dict]:
-    """Call Claude with web search to find vendors."""
-    api_key = st.secrets.get("ANTHROPIC_API_KEY") or st.secrets.get("anthropic_api_key")
+    """Call Gemini with Google Search grounding to find vendors."""
+    api_key = st.secrets.get("GEMINI_API_KEY") or st.secrets.get("gemini_api_key")
     if not api_key:
-        st.error("❌ API Key tidak ditemukan! Pastikan file `.streamlit/secrets.toml` sudah diisi dengan ANTHROPIC_API_KEY.")
+        st.error("❌ API Key tidak ditemukan! Pastikan Streamlit Secrets sudah diisi dengan GEMINI_API_KEY.")
         return []
-    client = anthropic.Anthropic(api_key=api_key)
 
     location_ctx = location if location != "Semua Provinsi" else "Indonesia"
     cat_ctx = f" kategori {category}" if category != "Semua Kategori" else ""
 
     prompt = f"""Cari informasi vendor/supplier yang menjual atau menyediakan "{keyword}"{cat_ctx} di wilayah {location_ctx}, Indonesia.
 
-Gunakan web search untuk menemukan vendor nyata. Prioritaskan:
+Gunakan Google Search untuk menemukan vendor nyata. Prioritaskan:
 1. Perusahaan atau toko yang beroperasi di {location_ctx}
 2. Vendor yang relevan dengan kata kunci: {keyword}
 3. Informasi kontak yang dapat diverifikasi
 
-Cari minimal 5 vendor berbeda. Setelah mencari, kembalikan hasil HANYA dalam format JSON array berikut (tanpa markdown, tanpa penjelasan tambahan):
+Cari minimal 5 vendor berbeda. Kembalikan hasil HANYA dalam format JSON array berikut (tanpa markdown, tanpa penjelasan tambahan):
 
 [
   {{
@@ -307,29 +306,47 @@ Cari minimal 5 vendor berbeda. Setelah mencari, kembalikan hasil HANYA dalam for
 Kembalikan HANYA JSON array, tidak ada teks lain."""
 
     try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4000,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": prompt}]
-        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
 
-        # Extract text from all content blocks
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 4000,
+            }
+        }
+
+        response = requests.post(url, json=payload, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract text from Gemini response
         full_text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                full_text += block.text
+        candidates = data.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            for part in parts:
+                if "text" in part:
+                    full_text += part["text"]
 
-        # Parse JSON
-        # Try to find JSON array in response
+        # Clean markdown fences if any
+        full_text = re.sub(r"```json|```", "", full_text).strip()
+
+        # Parse JSON array
         json_match = re.search(r'\[[\s\S]*\]', full_text)
         if json_match:
             vendors = json.loads(json_match.group())
             return vendors
         return []
 
+    except requests.exceptions.HTTPError as e:
+        err_body = e.response.json() if e.response else {}
+        msg = err_body.get("error", {}).get("message", str(e))
+        st.error(f"❌ Gemini API Error: {msg}")
+        return []
     except Exception as e:
-        st.error(f"Error saat mencari vendor: {str(e)}")
+        st.error(f"❌ Error saat mencari vendor: {str(e)}")
         return []
 
 
