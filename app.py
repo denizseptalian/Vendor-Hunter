@@ -305,49 +305,64 @@ Cari minimal 5 vendor berbeda. Kembalikan hasil HANYA dalam format JSON array be
 
 Kembalikan HANYA JSON array, tidak ada teks lain."""
 
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    import time
 
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "tools": [{"google_search": {}}],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 4000,
-            }
-        }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "tools": [{"google_search": {}}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4000}
+    }
 
-        response = requests.post(url, json=payload, timeout=60)
-        response.raise_for_status()
-        data = response.json()
+    # Retry dengan exponential backoff untuk handle 429
+    max_retries = 4
+    wait_seconds = [5, 15, 30, 60]
 
-        # Extract text from Gemini response
-        full_text = ""
-        candidates = data.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            for part in parts:
-                if "text" in part:
-                    full_text += part["text"]
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, json=payload, timeout=60)
 
-        # Clean markdown fences if any
-        full_text = re.sub(r"```json|```", "", full_text).strip()
+            if response.status_code == 429:
+                wait = wait_seconds[min(attempt, len(wait_seconds)-1)]
+                st.warning(f"⏳ Rate limit tercapai. Mencoba lagi dalam {wait} detik... (percobaan {attempt+1}/{max_retries})")
+                import time as _t; _t.sleep(wait)
+                continue
 
-        # Parse JSON array
-        json_match = re.search(r'\[[\s\S]*\]', full_text)
-        if json_match:
-            vendors = json.loads(json_match.group())
-            return vendors
-        return []
+            response.raise_for_status()
+            data = response.json()
 
-    except requests.exceptions.HTTPError as e:
-        err_body = e.response.json() if e.response else {}
-        msg = err_body.get("error", {}).get("message", str(e))
-        st.error(f"❌ Gemini API Error: {msg}")
-        return []
-    except Exception as e:
-        st.error(f"❌ Error saat mencari vendor: {str(e)}")
-        return []
+            full_text = ""
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                for part in parts:
+                    if "text" in part:
+                        full_text += part["text"]
+
+            full_text = re.sub(r"```json|```", "", full_text).strip()
+
+            json_match = re.search(r'\[[\s\S]*\]', full_text)
+            if json_match:
+                vendors = json.loads(json_match.group())
+                return vendors
+            return []
+
+        except requests.exceptions.HTTPError as e:
+            err_body = e.response.json() if e.response else {}
+            msg = err_body.get("error", {}).get("message", str(e))
+            st.error(f"❌ Gemini API Error: {msg}")
+            return []
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait = wait_seconds[min(attempt, len(wait_seconds)-1)]
+                st.warning(f"⏳ Error sementara, mencoba lagi dalam {wait} detik...")
+                import time as _t; _t.sleep(wait)
+                continue
+            st.error(f"❌ Error saat mencari vendor: {str(e)}")
+            return []
+
+    st.error("❌ Gagal setelah beberapa percobaan. Tunggu 1 menit lalu coba lagi.")
+    return []
 
 
 # ─── Render Vendor Card ─────────────────────────────────────────
