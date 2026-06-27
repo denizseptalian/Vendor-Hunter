@@ -68,6 +68,15 @@ html,body,.stApp{background:#0D1117!important;color:#E6EDF3!important;font-famil
 .card-desc{font-size:13px;color:#8B949E;line-height:1.6;background:#0D1117;border-radius:8px;padding:11px 13px}
 .tag-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
 .tag{font-size:11px;color:#58A6FF;background:rgba(88,166,255,0.08);border:1px solid rgba(88,166,255,0.15);border-radius:5px;padding:2px 8px}
+.action-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.action-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none!important;border:1px solid;transition:opacity 0.2s}
+.action-btn:hover{opacity:0.8}
+.btn-google{background:rgba(66,133,244,0.12);border-color:rgba(66,133,244,0.3);color:#4285F4!important}
+.btn-maps{background:rgba(52,168,83,0.12);border-color:rgba(52,168,83,0.3);color:#34A853!important}
+.btn-tokped{background:rgba(66,181,73,0.12);border-color:rgba(66,181,73,0.3);color:#42b549!important}
+.btn-shopee{background:rgba(238,77,45,0.12);border-color:rgba(238,77,45,0.3);color:#ee4d2d!important}
+.btn-wa{background:rgba(37,211,102,0.12);border-color:rgba(37,211,102,0.3);color:#25D366!important}
+.unverified-notice{display:flex;align-items:center;gap:8px;background:rgba(210,153,34,0.08);border:1px solid rgba(210,153,34,0.2);border-radius:8px;padding:10px 14px;font-size:12px;color:#D29922;margin-bottom:14px}
 /* Online store cards */
 .store-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .store-card{background:#161B22;border:1px solid #21262D;border-radius:12px;padding:18px 20px;text-align:left;transition:border-color 0.2s}
@@ -175,20 +184,18 @@ Kembalikan HANYA satu JSON object ini (tanpa markdown, tanpa teks lain):
 {{
   "vendors": [
     {{
-      "nama": "Nama perusahaan",
+      "nama": "Nama perusahaan lengkap dan spesifik",
       "tipe": "Distributor/Supplier/Produsen/Toko/Importir",
-      "alamat": "Alamat lengkap",
+      "alamat": "Alamat lengkap dengan nama jalan, kelurahan, kecamatan, kota, provinsi",
       "kota": "Nama kota",
       "provinsi": "Nama provinsi",
-      "telepon": "Nomor telepon atau '-'",
-      "email": "Email atau '-'",
-      "website": "URL atau '-'",
-      "whatsapp": "Nomor WA atau '-'",
-      "produk_utama": "Produk utama",
-      "deskripsi": "Deskripsi 2-3 kalimat",
+      "produk_utama": "Produk utama yang dijual",
+      "deskripsi": "Deskripsi 2-3 kalimat tentang vendor dan keunggulannya",
       "tags": ["tag1","tag2","tag3"],
       "min_order": "Minimum order atau '-'",
-      "area_kirim": "Area pengiriman"
+      "area_kirim": "Area pengiriman",
+      "tahun_berdiri": "Tahun berdiri atau '-'",
+      "skala": "UMKM/Menengah/Besar"
     }}
   ],
   "harga_pasar": {{
@@ -238,6 +245,7 @@ Berikan 6 vendor. Hanya JSON, tidak ada teks lain."""
 
 # ─── Build Map ───────────────────────────────────────────────────
 def build_map(vendors: list, location: str) -> folium.Map:
+    from urllib.parse import quote_plus
     loc_lower = location.lower()
     center = CITY_COORDS.get(loc_lower, (-2.5489, 118.0149))
     zoom   = 10 if location != "Semua Provinsi" else 5
@@ -253,16 +261,19 @@ def build_map(vendors: list, location: str) -> folium.Map:
         lat, lng = get_coords(v)
         lat += (i%3-1)*0.008; lng += (i//3-0.5)*0.008
         color = colors[i % len(colors)]
-        phone = v.get("telepon","-"); web = v.get("website","-")
-        web_a = f'<a href="{web}" target="_blank" style="color:#58A6FF">{web[:28]}...</a>' if web!="-" and len(web)>28 else (f'<a href="{web}" target="_blank" style="color:#58A6FF">{web}</a>' if web!="-" else "-")
-        popup = f"""<div style="font-family:Inter,sans-serif;min-width:220px">
+        q_g = quote_plus(f"{v.get('nama','')} {v.get('kota','')}")
+        q_m = quote_plus(f"{v.get('nama','')} {v.get('alamat','')}")
+        popup = f"""<div style="font-family:Inter,sans-serif;min-width:230px">
           <div style="background:{color};color:white;padding:7px 11px;border-radius:5px 5px 0 0;font-weight:700;font-size:12px">🏢 {v.get("nama","Vendor")}</div>
           <div style="background:#1c1c1e;color:#ddd;padding:9px 11px;border-radius:0 0 5px 5px;font-size:11px;line-height:1.7">
             <b style="color:#aaa">Tipe:</b> {v.get("tipe","-")}<br>
-            <b style="color:#aaa">Kota:</b> {v.get("kota","-")}<br>
-            <b style="color:#aaa">Tel:</b> {phone}<br>
-            <b style="color:#aaa">Web:</b> {web_a}<br>
-            <b style="color:#aaa">Min Order:</b> {v.get("min_order","-")}
+            <b style="color:#aaa">Kota:</b> {v.get("kota","-")}, {v.get("provinsi","-")}<br>
+            <b style="color:#aaa">Produk:</b> {v.get("produk_utama","-")[:40]}<br>
+            <b style="color:#aaa">Skala:</b> {v.get("skala","-")}<br>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+              <a href="https://www.google.com/search?q={q_g}" target="_blank" style="background:#4285F4;color:white;padding:3px 8px;border-radius:4px;text-decoration:none;font-size:10px;font-weight:600">🔍 Google</a>
+              <a href="https://www.google.com/maps/search/{q_m}" target="_blank" style="background:#34A853;color:white;padding:3px 8px;border-radius:4px;text-decoration:none;font-size:10px;font-weight:600">📍 Maps</a>
+            </div>
           </div></div>"""
         folium.Marker(
             location=[lat,lng],
@@ -312,40 +323,69 @@ def render_harga(harga: dict, keyword: str, spesifikasi: str):
 
 
 def render_vendor_card(v: dict, idx: int):
+    from urllib.parse import quote_plus
     colors = ["#58A6FF","#3FB950","#F78166","#D29922","#BC8CFF","#FF7B72"]
     c = colors[idx % len(colors)]
-    phone = v.get("telepon","-"); email = v.get("email","-")
-    web   = v.get("website","-"); wa    = v.get("whatsapp","-")
-    wa_num = re.sub(r'\D','', wa if wa!='-' else phone).lstrip('0')
-    wa_url = f"https://wa.me/62{wa_num}" if wa_num else None
-    ph_h = f'<a href="tel:{phone}">{phone}</a>'          if phone!='-' else '-'
-    em_h = f'<a href="mailto:{email}">{email}</a>'       if email!='-' else '-'
-    wb_h = f'<a href="{web}" target="_blank">{web[:32]}{"..." if len(web)>32 else ""}</a>' if web!='-' else '-'
-    wa_h = f'<a href="{wa_url}" target="_blank">💬 Chat WA</a>' if wa_url else '-'
+    nama    = v.get("nama","")
+    kota    = v.get("kota","")
+    provinsi= v.get("provinsi","")
+    alamat  = v.get("alamat","-")
+    skala   = v.get("skala","-")
+    tahun   = v.get("tahun_berdiri","-")
+
+    # Build verified search URLs (real links, bukan data AI)
+    q_nama   = quote_plus(f"{nama} {kota} {provinsi}")
+    q_maps   = quote_plus(f"{nama} {alamat}")
+    q_tokped = quote_plus(f"{v.get('produk_utama','')} {kota}")
+    q_shopee = quote_plus(f"{v.get('produk_utama','')} {kota}")
+    q_wa     = quote_plus(f"supplier {v.get('produk_utama','')} {kota}")
+
+    url_google = f"https://www.google.com/search?q={q_nama}"
+    url_maps   = f"https://www.google.com/maps/search/{q_maps}"
+    url_tokped = f"https://www.tokopedia.com/search?st=product&q={q_tokped}"
+    url_shopee = f"https://shopee.co.id/search?keyword={q_shopee}"
+    url_wa     = f"https://wa.me/?text={q_wa}"
+
     tags_h = "".join(f'<span class="tag">{t}</span>' for t in v.get("tags",[])[:5])
+
     st.markdown(f"""
     <div class="vendor-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:12px">
           <div style="background:{c};color:white;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0">{idx+1}</div>
-          <div><div class="vendor-name">{v.get("nama","—")}</div>
-          <div class="vendor-type">{v.get("tipe","Vendor")} · {v.get("kota","")} · {v.get("provinsi","")}</div></div>
+          <div>
+            <div class="vendor-name">{nama}</div>
+            <div class="vendor-type">{v.get("tipe","Vendor")} · {kota} · {provinsi}</div>
+          </div>
         </div>
         <div style="font-size:11px;color:#3FB950;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.2);border-radius:6px;padding:3px 10px;white-space:nowrap">🚚 {v.get("area_kirim","-")}</div>
       </div>
-      <div class="card-grid">
-        <div class="card-field"><div class="field-label">📍 Alamat</div><div class="field-value">{v.get("alamat","-")}</div></div>
-        <div class="card-field"><div class="field-label">📞 Telepon</div><div class="field-value">{ph_h}</div></div>
-        <div class="card-field"><div class="field-label">✉️ Email</div><div class="field-value">{em_h}</div></div>
-        <div class="card-field"><div class="field-label">💬 WhatsApp</div><div class="field-value">{wa_h}</div></div>
-        <div class="card-field"><div class="field-label">🌐 Website</div><div class="field-value">{wb_h}</div></div>
-        <div class="card-field"><div class="field-label">📦 Min. Order</div><div class="field-value">{v.get("min_order","-")}</div></div>
+
+      <div class="unverified-notice">
+        ⚠️ <span>Kontak tidak ditampilkan karena data AI tidak dapat diverifikasi. Gunakan tombol di bawah untuk mencari kontak asli vendor ini.</span>
       </div>
-      <div class="card-desc"><b style="color:#C9D1D9">Produk:</b> {v.get("produk_utama","-")}<br><br>{v.get("deskripsi","-")}</div>
+
+      <div class="card-grid">
+        <div class="card-field"><div class="field-label">📍 Alamat</div><div class="field-value">{alamat}</div></div>
+        <div class="card-field"><div class="field-label">📦 Produk Utama</div><div class="field-value">{v.get("produk_utama","-")}</div></div>
+        <div class="card-field"><div class="field-label">🏷️ Min. Order</div><div class="field-value">{v.get("min_order","-")}</div></div>
+        <div class="card-field"><div class="field-label">🏢 Skala Bisnis</div><div class="field-value">{skala}</div></div>
+        <div class="card-field"><div class="field-label">📅 Tahun Berdiri</div><div class="field-value">{tahun}</div></div>
+        <div class="card-field"><div class="field-label">🚚 Area Kirim</div><div class="field-value">{v.get("area_kirim","-")}</div></div>
+      </div>
+
+      <div class="card-desc">{v.get("deskripsi","-")}</div>
+
+      <div class="action-row">
+        <a href="{url_google}" target="_blank" class="action-btn btn-google">🔍 Cari di Google</a>
+        <a href="{url_maps}"   target="_blank" class="action-btn btn-maps">📍 Google Maps</a>
+        <a href="{url_tokped}" target="_blank" class="action-btn btn-tokped">🟢 Cari di Tokopedia</a>
+        <a href="{url_shopee}" target="_blank" class="action-btn btn-shopee">🟠 Cari di Shopee</a>
+        <a href="{url_wa}"     target="_blank" class="action-btn btn-wa">💬 Cari via WhatsApp</a>
+      </div>
       <div class="tag-row">{tags_h}</div>
     </div>
     """, unsafe_allow_html=True)
-
 
 def render_toko_online(toko_list: list, keyword: str, location: str):
     store_cards = ""
